@@ -1,0 +1,104 @@
+from __future__ import annotations
+
+import json
+import os
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
+
+
+def _expand_path(value: str) -> Path:
+    return Path(os.path.expandvars(os.path.expanduser(value))).resolve()
+
+
+@dataclass(slots=True)
+class CleanupRule:
+    name: str
+    source_dir: Path
+    target_dir: Path
+    min_size_mb: int = 500
+    keep_recent_hours: int = 24
+    include_extensions: list[str] = field(default_factory=list)
+    exclude_extensions: list[str] = field(default_factory=list)
+    organize_by: str = "month"
+
+
+@dataclass(slots=True)
+class AppAuditConfig:
+    unused_days: int = 30
+    minimum_install_age_days: int = 45
+    ignored_name_fragments: list[str] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class Config:
+    database_path: Path
+    cleanup_rules: list[CleanupRule]
+    app_audit: AppAuditConfig
+    report_directory: Path
+
+
+DEFAULT_CONFIG: dict[str, Any] = {
+    "database_path": r"%LOCALAPPDATA%\StorageGenius\storage-genius.db",
+    "report_directory": r"%USERPROFILE%\Documents\StorageGenius",
+    "cleanup_rules": [
+        {
+            "name": "large-downloads",
+            "source_dir": r"%USERPROFILE%\Downloads",
+            "target_dir": r"D:\StorageGeniusBackup\DownloadsArchive",
+            "min_size_mb": 500,
+            "keep_recent_hours": 24,
+            "include_extensions": [],
+            "exclude_extensions": [".tmp", ".crdownload", ".part"],
+            "organize_by": "month",
+        }
+    ],
+    "app_audit": {
+        "unused_days": 30,
+        "minimum_install_age_days": 45,
+        "ignored_name_fragments": [
+            "Security Update",
+            "Update for",
+            "Microsoft Visual C++",
+            "Windows SDK",
+            "Driver",
+            "Redistributable",
+        ],
+    },
+}
+
+
+def default_config_text() -> str:
+    return json.dumps(DEFAULT_CONFIG, indent=2) + "\n"
+
+
+def _load_cleanup_rule(raw: dict[str, Any]) -> CleanupRule:
+    return CleanupRule(
+        name=raw["name"],
+        source_dir=_expand_path(raw["source_dir"]),
+        target_dir=_expand_path(raw["target_dir"]),
+        min_size_mb=int(raw.get("min_size_mb", 500)),
+        keep_recent_hours=int(raw.get("keep_recent_hours", 24)),
+        include_extensions=[str(item).lower() for item in raw.get("include_extensions", [])],
+        exclude_extensions=[str(item).lower() for item in raw.get("exclude_extensions", [])],
+        organize_by=str(raw.get("organize_by", "month")).lower(),
+    )
+
+
+def load_config(path: Path) -> Config:
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    cleanup_rules = [_load_cleanup_rule(item) for item in payload["cleanup_rules"]]
+    app_raw = payload.get("app_audit", {})
+    app_audit = AppAuditConfig(
+        unused_days=int(app_raw.get("unused_days", 30)),
+        minimum_install_age_days=int(app_raw.get("minimum_install_age_days", 45)),
+        ignored_name_fragments=[str(item).lower() for item in app_raw.get("ignored_name_fragments", [])],
+    )
+    database_path = _expand_path(payload.get("database_path", DEFAULT_CONFIG["database_path"]))
+    report_directory = _expand_path(payload.get("report_directory", DEFAULT_CONFIG["report_directory"]))
+    return Config(
+        database_path=database_path,
+        cleanup_rules=cleanup_rules,
+        app_audit=app_audit,
+        report_directory=report_directory,
+    )

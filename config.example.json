@@ -1,0 +1,32 @@
+{
+  "database_path": "%LOCALAPPDATA%\\StorageGenius\\storage-genius.db",
+  "report_directory": "%USERPROFILE%\\Documents\\StorageGenius",
+  "cleanup_rules": [
+    {
+      "name": "large-downloads",
+      "source_dir": "%USERPROFILE%\\Downloads",
+      "target_dir": "D:\\StorageGeniusBackup\\DownloadsArchive",
+      "min_size_mb": 500,
+      "keep_recent_hours": 24,
+      "include_extensions": [],
+      "exclude_extensions": [
+        ".tmp",
+        ".crdownload",
+        ".part"
+      ],
+      "organize_by": "month"
+    }
+  ],
+  "app_audit": {
+    "unused_days": 30,
+    "minimum_install_age_days": 45,
+    "ignored_name_fragments": [
+      "Security Update",
+      "Update for",
+      "Microsoft Visual C++",
+      "Windows SDK",
+      "Driver",
+      "Redistributable"
+    ]
+  }
+}

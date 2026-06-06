@@ -28,5 +28,23 @@
       "Driver",
       "Redistributable"
     ]
+  },
+  "hotspot_scan": {
+    "roots": [
+      "%USERPROFILE%",
+      "%LOCALAPPDATA%",
+      "%APPDATA%",
+      "%ProgramData%",
+      "%TEMP%",
+      "%SystemRoot%\\Temp",
+      "C:\\Program Files",
+      "C:\\Program Files (x86)"
+    ],
+    "exclude_paths": [
+      "%LOCALAPPDATA%\\StorageGenius"
+    ],
+    "large_file_threshold_mb": 250,
+    "max_depth": 4,
+    "html_reports_to_keep": 10
   }
 }

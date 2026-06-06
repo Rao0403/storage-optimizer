@@ -30,6 +30,31 @@ class AppInventoryRecord:
     match_reason: str | None
 
 
+@dataclass(slots=True)
+class ScanRunRecord:
+    scan_type: str
+    started_at: str
+    completed_at: str | None = None
+    roots_json: str | None = None
+    report_path: str | None = None
+    total_size_bytes: int = 0
+    total_reclaimable_bytes: int = 0
+
+
+@dataclass(slots=True)
+class HotspotFindingRecord:
+    scan_run_id: int
+    root_path: str
+    path: str
+    item_type: str
+    category: str
+    size_bytes: int
+    reclaimable_bytes: int
+    action_type_hint: str
+    confidence: str
+    details_json: str
+
+
 def open_database(path: Path) -> sqlite3.Connection:
     path.parent.mkdir(parents=True, exist_ok=True)
     connection = sqlite3.connect(path)
@@ -61,6 +86,32 @@ def initialize_database(connection: sqlite3.Connection) -> None:
           last_used TEXT,
           last_seen TEXT NOT NULL,
           match_reason TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS scan_runs (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          scan_type TEXT NOT NULL,
+          started_at TEXT NOT NULL,
+          completed_at TEXT,
+          roots_json TEXT,
+          report_path TEXT,
+          total_size_bytes INTEGER NOT NULL DEFAULT 0,
+          total_reclaimable_bytes INTEGER NOT NULL DEFAULT 0
+        );
+
+        CREATE TABLE IF NOT EXISTS hotspot_findings (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          scan_run_id INTEGER NOT NULL,
+          root_path TEXT NOT NULL,
+          path TEXT NOT NULL,
+          item_type TEXT NOT NULL,
+          category TEXT NOT NULL,
+          size_bytes INTEGER NOT NULL,
+          reclaimable_bytes INTEGER NOT NULL,
+          action_type_hint TEXT NOT NULL,
+          confidence TEXT NOT NULL,
+          details_json TEXT NOT NULL,
+          FOREIGN KEY(scan_run_id) REFERENCES scan_runs(id)
         );
         """
     )
@@ -143,3 +194,72 @@ def fetch_unused_apps(connection: sqlite3.Connection, cutoff_iso: str) -> list[s
         (cutoff_iso,),
     )
     return list(cursor.fetchall())
+
+
+def create_scan_run(connection: sqlite3.Connection, record: ScanRunRecord) -> int:
+    cursor = connection.execute(
+        """
+        INSERT INTO scan_runs(
+          scan_type, started_at, completed_at, roots_json, report_path, total_size_bytes, total_reclaimable_bytes
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            record.scan_type,
+            record.started_at,
+            record.completed_at,
+            record.roots_json,
+            record.report_path,
+            record.total_size_bytes,
+            record.total_reclaimable_bytes,
+        ),
+    )
+    connection.commit()
+    return int(cursor.lastrowid)
+
+
+def finalize_scan_run(connection: sqlite3.Connection, scan_run_id: int, record: ScanRunRecord) -> None:
+    connection.execute(
+        """
+        UPDATE scan_runs
+        SET completed_at = ?, roots_json = ?, report_path = ?, total_size_bytes = ?, total_reclaimable_bytes = ?
+        WHERE id = ?
+        """,
+        (
+            record.completed_at,
+            record.roots_json,
+            record.report_path,
+            record.total_size_bytes,
+            record.total_reclaimable_bytes,
+            scan_run_id,
+        ),
+    )
+    connection.commit()
+
+
+def insert_hotspot_findings(connection: sqlite3.Connection, findings: list[HotspotFindingRecord]) -> None:
+    connection.executemany(
+        """
+        INSERT INTO hotspot_findings(
+          scan_run_id, root_path, path, item_type, category, size_bytes,
+          reclaimable_bytes, action_type_hint, confidence, details_json
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        [
+            (
+                finding.scan_run_id,
+                finding.root_path,
+                finding.path,
+                finding.item_type,
+                finding.category,
+                finding.size_bytes,
+                finding.reclaimable_bytes,
+                finding.action_type_hint,
+                finding.confidence,
+                finding.details_json,
+            )
+            for finding in findings
+        ],
+    )
+    connection.commit()

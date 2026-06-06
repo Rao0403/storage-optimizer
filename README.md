@@ -7,6 +7,8 @@ The first version focuses on two jobs:
 1. Move large files out of `Downloads` automatically based on configurable rules.
 2. Track installed apps and flag the ones that appear unused for 30+ days.
 
+V2 starts by adding a dedicated hotspot scanner for `C:` so later cleanup and relocation decisions are based on measured storage pressure instead of guesswork.
+
 ## Why this shape
 
 The large-file cleanup is deterministic and safe enough to automate now.
@@ -22,6 +24,14 @@ The uninstall side is intentionally advisory in v1. Windows uninstall metadata i
 - Installed app inventory from the Windows uninstall registry.
 - Usage signals from the current user's `UserAssist` registry data.
 - Unused-app report based on your configured day threshold.
+
+## V2 feature 1
+
+- `scan-hotspots` command focused on `C:` pressure.
+- Classification for large personal files, installers, archives, temp files, app caches, developer caches, and app install folders.
+- SQLite history for hotspot scans and findings.
+- Static HTML report generation under `report_directory`.
+- Predicted savings and action hints for each finding.
 
 ## Project layout
 
@@ -73,6 +83,18 @@ python -m storage_genius --config config.json run-once --dry-run
 
 Remove `--dry-run` once the moves look correct.
 
+7. Generate a hotspot report:
+
+```powershell
+python -m storage_genius --config config.json scan-hotspots
+```
+
+8. Generate JSON instead:
+
+```powershell
+python -m storage_genius --config config.json scan-hotspots --json
+```
+
 ## Config example
 
 Use [`config.example.json`](./config.example.json) as a starting point.
@@ -87,12 +109,18 @@ Key fields:
 - `cleanup_rules[].exclude_extensions`: useful for temporary and in-progress downloads.
 - `app_audit.unused_days`: report apps not seen recently.
 - `app_audit.minimum_install_age_days`: ignore apps you installed recently.
+- `hotspot_scan.roots`: folders to inspect for SSD pressure.
+- `hotspot_scan.exclude_paths`: folders the scanner should skip.
+- `hotspot_scan.large_file_threshold_mb`: minimum size for file and directory findings.
+- `hotspot_scan.max_depth`: recursive depth for directory sizing.
+- `hotspot_scan.html_reports_to_keep`: how many old hotspot reports to retain.
 
 ## Important limitations
 
 - `UserAssist` mostly reflects GUI launches for the current Windows user. It will miss some terminal-launched tools and background-only apps.
 - App matching is heuristic. Review the report before uninstalling anything.
 - Cleanup currently scans only the top level of each configured folder, not nested folders.
+- The hotspot scanner is intentionally conservative about directory classification. It is designed to surface pressure, not delete anything automatically.
 
 ## Good next additions
 

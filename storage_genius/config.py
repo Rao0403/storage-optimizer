@@ -31,11 +31,21 @@ class AppAuditConfig:
 
 
 @dataclass(slots=True)
+class HotspotScanConfig:
+    roots: list[Path]
+    exclude_paths: list[Path] = field(default_factory=list)
+    large_file_threshold_mb: int = 250
+    max_depth: int = 4
+    html_reports_to_keep: int = 10
+
+
+@dataclass(slots=True)
 class Config:
     database_path: Path
     cleanup_rules: list[CleanupRule]
     app_audit: AppAuditConfig
     report_directory: Path
+    hotspot_scan: HotspotScanConfig
 
 
 DEFAULT_CONFIG: dict[str, Any] = {
@@ -65,6 +75,24 @@ DEFAULT_CONFIG: dict[str, Any] = {
             "Redistributable",
         ],
     },
+    "hotspot_scan": {
+        "roots": [
+            r"%USERPROFILE%",
+            r"%LOCALAPPDATA%",
+            r"%APPDATA%",
+            r"%ProgramData%",
+            r"%TEMP%",
+            r"%SystemRoot%\Temp",
+            r"C:\Program Files",
+            r"C:\Program Files (x86)",
+        ],
+        "exclude_paths": [
+            r"%LOCALAPPDATA%\StorageGenius",
+        ],
+        "large_file_threshold_mb": 250,
+        "max_depth": 4,
+        "html_reports_to_keep": 10,
+    },
 }
 
 
@@ -85,6 +113,16 @@ def _load_cleanup_rule(raw: dict[str, Any]) -> CleanupRule:
     )
 
 
+def _load_hotspot_scan_config(raw: dict[str, Any]) -> HotspotScanConfig:
+    return HotspotScanConfig(
+        roots=[_expand_path(item) for item in raw.get("roots", DEFAULT_CONFIG["hotspot_scan"]["roots"])],
+        exclude_paths=[_expand_path(item) for item in raw.get("exclude_paths", [])],
+        large_file_threshold_mb=int(raw.get("large_file_threshold_mb", 250)),
+        max_depth=int(raw.get("max_depth", 4)),
+        html_reports_to_keep=int(raw.get("html_reports_to_keep", 10)),
+    )
+
+
 def load_config(path: Path) -> Config:
     payload = json.loads(path.read_text(encoding="utf-8"))
     cleanup_rules = [_load_cleanup_rule(item) for item in payload["cleanup_rules"]]
@@ -94,6 +132,7 @@ def load_config(path: Path) -> Config:
         minimum_install_age_days=int(app_raw.get("minimum_install_age_days", 45)),
         ignored_name_fragments=[str(item).lower() for item in app_raw.get("ignored_name_fragments", [])],
     )
+    hotspot_scan = _load_hotspot_scan_config(payload.get("hotspot_scan", {}))
     database_path = _expand_path(payload.get("database_path", DEFAULT_CONFIG["database_path"]))
     report_directory = _expand_path(payload.get("report_directory", DEFAULT_CONFIG["report_directory"]))
     return Config(
@@ -101,4 +140,5 @@ def load_config(path: Path) -> Config:
         cleanup_rules=cleanup_rules,
         app_audit=app_audit,
         report_directory=report_directory,
+        hotspot_scan=hotspot_scan,
     )

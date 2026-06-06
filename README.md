@@ -33,6 +33,14 @@ The uninstall side is intentionally advisory in v1. Windows uninstall metadata i
 - Static HTML report generation under `report_directory`.
 - Predicted savings and action hints for each finding.
 
+## V2 feature 2
+
+- SQLite-backed action queue with explicit states: `pending`, `approved`, `executed`, `failed`, `rolled_back`, `dismissed`.
+- Execution and undo logs for every queued action.
+- Queue CLI for review, approval, execution, dismissal, and undo.
+- Reversible `move_file` actions are fully supported now; `delete_cache` and `relocate_app` action types are reserved for later feature slices.
+- Hotspot HTML reports now include queue state counts.
+
 ## Project layout
 
 ```text
@@ -93,6 +101,16 @@ python -m storage_genius --config config.json scan-hotspots
 
 ```powershell
 python -m storage_genius --config config.json scan-hotspots --json
+```
+
+9. Inspect queued actions:
+
+```powershell
+python -m storage_genius --config config.json queue list
+python -m storage_genius --config config.json queue show 1
+python -m storage_genius --config config.json queue approve 1
+python -m storage_genius --config config.json queue execute
+python -m storage_genius --config config.json queue undo 1
 ```
 
 ## Config example

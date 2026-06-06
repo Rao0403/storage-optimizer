@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import sqlite3
 from dataclasses import dataclass
 from datetime import datetime
@@ -53,6 +54,26 @@ class HotspotFindingRecord:
     action_type_hint: str
     confidence: str
     details_json: str
+
+
+@dataclass(slots=True)
+class ActionQueueRecord:
+    action_type: str
+    state: str
+    payload_json: str
+    created_at: str
+    human_summary: str
+    id: int | None = None
+    updated_at: str | None = None
+    approved_at: str | None = None
+    executed_at: str | None = None
+    undone_at: str | None = None
+    rollback_payload_json: str | None = None
+    failure_message: str | None = None
+
+
+ACTION_STATES = ("pending", "approved", "executed", "failed", "rolled_back", "dismissed")
+ACTION_TYPES = ("move_file", "delete_cache", "relocate_app")
 
 
 def open_database(path: Path) -> sqlite3.Connection:
@@ -112,6 +133,41 @@ def initialize_database(connection: sqlite3.Connection) -> None:
           confidence TEXT NOT NULL,
           details_json TEXT NOT NULL,
           FOREIGN KEY(scan_run_id) REFERENCES scan_runs(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS action_queue (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          action_type TEXT NOT NULL,
+          state TEXT NOT NULL,
+          payload_json TEXT NOT NULL,
+          rollback_payload_json TEXT,
+          human_summary TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          updated_at TEXT,
+          approved_at TEXT,
+          executed_at TEXT,
+          undone_at TEXT,
+          failure_message TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS action_execution_log (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          action_id INTEGER NOT NULL,
+          happened_at TEXT NOT NULL,
+          status TEXT NOT NULL,
+          message TEXT NOT NULL,
+          details_json TEXT NOT NULL,
+          FOREIGN KEY(action_id) REFERENCES action_queue(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS action_undo_log (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          action_id INTEGER NOT NULL,
+          happened_at TEXT NOT NULL,
+          status TEXT NOT NULL,
+          message TEXT NOT NULL,
+          details_json TEXT NOT NULL,
+          FOREIGN KEY(action_id) REFERENCES action_queue(id)
         );
         """
     )
@@ -263,3 +319,150 @@ def insert_hotspot_findings(connection: sqlite3.Connection, findings: list[Hotsp
         ],
     )
     connection.commit()
+
+
+def create_action_queue_record(connection: sqlite3.Connection, record: ActionQueueRecord) -> int:
+    if record.action_type not in ACTION_TYPES:
+        raise ValueError(f"Unsupported action type: {record.action_type}")
+    if record.state not in ACTION_STATES:
+        raise ValueError(f"Unsupported action state: {record.state}")
+
+    cursor = connection.execute(
+        """
+        INSERT INTO action_queue(
+          action_type, state, payload_json, rollback_payload_json, human_summary,
+          created_at, updated_at, approved_at, executed_at, undone_at, failure_message
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            record.action_type,
+            record.state,
+            record.payload_json,
+            record.rollback_payload_json,
+            record.human_summary,
+            record.created_at,
+            record.updated_at,
+            record.approved_at,
+            record.executed_at,
+            record.undone_at,
+            record.failure_message,
+        ),
+    )
+    connection.commit()
+    return int(cursor.lastrowid)
+
+
+def fetch_action_queue_record(connection: sqlite3.Connection, action_id: int) -> sqlite3.Row | None:
+    cursor = connection.execute("SELECT * FROM action_queue WHERE id = ?", (action_id,))
+    return cursor.fetchone()
+
+
+def list_action_queue_records(connection: sqlite3.Connection) -> list[sqlite3.Row]:
+    cursor = connection.execute(
+        """
+        SELECT *
+        FROM action_queue
+        ORDER BY id ASC
+        """
+    )
+    return list(cursor.fetchall())
+
+
+def list_actions_by_state(connection: sqlite3.Connection, state: str) -> list[sqlite3.Row]:
+    cursor = connection.execute(
+        """
+        SELECT *
+        FROM action_queue
+        WHERE state = ?
+        ORDER BY id ASC
+        """,
+        (state,),
+    )
+    return list(cursor.fetchall())
+
+
+def update_action_queue_record(
+    connection: sqlite3.Connection,
+    action_id: int,
+    *,
+    state: str,
+    updated_at: str,
+    approved_at: str | None = None,
+    executed_at: str | None = None,
+    undone_at: str | None = None,
+    rollback_payload_json: str | None = None,
+    failure_message: str | None = None,
+) -> None:
+    if state not in ACTION_STATES:
+        raise ValueError(f"Unsupported action state: {state}")
+    connection.execute(
+        """
+        UPDATE action_queue
+        SET state = ?, updated_at = ?, approved_at = ?, executed_at = ?, undone_at = ?,
+            rollback_payload_json = COALESCE(?, rollback_payload_json),
+            failure_message = ?
+        WHERE id = ?
+        """,
+        (
+            state,
+            updated_at,
+            approved_at,
+            executed_at,
+            undone_at,
+            rollback_payload_json,
+            failure_message,
+            action_id,
+        ),
+    )
+    connection.commit()
+
+
+def insert_action_execution_log(
+    connection: sqlite3.Connection, action_id: int, happened_at: str, status: str, message: str, details: dict
+) -> None:
+    connection.execute(
+        """
+        INSERT INTO action_execution_log(action_id, happened_at, status, message, details_json)
+        VALUES (?, ?, ?, ?, ?)
+        """,
+        (action_id, happened_at, status, message, json.dumps(details, sort_keys=True)),
+    )
+    connection.commit()
+
+
+def insert_action_undo_log(
+    connection: sqlite3.Connection, action_id: int, happened_at: str, status: str, message: str, details: dict
+) -> None:
+    connection.execute(
+        """
+        INSERT INTO action_undo_log(action_id, happened_at, status, message, details_json)
+        VALUES (?, ?, ?, ?, ?)
+        """,
+        (action_id, happened_at, status, message, json.dumps(details, sort_keys=True)),
+    )
+    connection.commit()
+
+
+def fetch_action_logs(connection: sqlite3.Connection, table_name: str, action_id: int) -> list[sqlite3.Row]:
+    if table_name not in {"action_execution_log", "action_undo_log"}:
+        raise ValueError("Unsupported log table")
+    cursor = connection.execute(
+        f"SELECT * FROM {table_name} WHERE action_id = ? ORDER BY id ASC",  # noqa: S608
+        (action_id,),
+    )
+    return list(cursor.fetchall())
+
+
+def fetch_queue_summary(connection: sqlite3.Connection) -> dict[str, int]:
+    cursor = connection.execute(
+        """
+        SELECT state, COUNT(*) AS item_count
+        FROM action_queue
+        GROUP BY state
+        """
+    )
+    summary = {state: 0 for state in ACTION_STATES}
+    for row in cursor.fetchall():
+        summary[row["state"]] = row["item_count"]
+    return summary

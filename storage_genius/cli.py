@@ -8,20 +8,28 @@ from pathlib import Path
 from .app_usage import build_inventory_records, is_likely_user_facing_app, read_userassist_entries
 from .config import default_config_text, load_config
 from .db import (
+    ACTION_STATES,
     AppInventoryRecord,
+    ActionQueueRecord,
     FileMoveRecord,
     HotspotFindingRecord,
     ScanRunRecord,
+    create_action_queue_record,
     create_scan_run,
+    fetch_action_logs,
+    fetch_action_queue_record,
+    fetch_queue_summary,
     fetch_unused_apps,
     finalize_scan_run,
     insert_hotspot_findings,
+    list_action_queue_records,
     open_database,
     record_file_move,
     upsert_app_inventory,
 )
 from .file_rules import execute_planned_moves, plan_moves
 from .hotspots import scan_hotspots
+from .queue_actions import approve_action, dismiss_action, execute_approved_actions, undo_action
 from .reports import write_hotspot_report
 from .windows_apps import list_installed_apps
 
@@ -41,6 +49,21 @@ def build_parser() -> argparse.ArgumentParser:
     hotspot_parser = subparsers.add_parser("scan-hotspots", help="Scan C-drive storage hotspots and generate a report.")
     hotspot_parser.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
     hotspot_parser.add_argument("--html-only", action="store_true", help="Only print the generated HTML report path.")
+
+    queue_parser = subparsers.add_parser("queue", help="Inspect and manage queued actions.")
+    queue_subparsers = queue_parser.add_subparsers(dest="queue_command", required=True)
+    queue_list_parser = queue_subparsers.add_parser("list", help="List queued actions.")
+    queue_list_parser.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
+    queue_show_parser = queue_subparsers.add_parser("show", help="Show one queued action.")
+    queue_show_parser.add_argument("action_id", type=int)
+    queue_show_parser.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
+    queue_approve_parser = queue_subparsers.add_parser("approve", help="Approve one queued action.")
+    queue_approve_parser.add_argument("action_id", type=int)
+    queue_dismiss_parser = queue_subparsers.add_parser("dismiss", help="Dismiss one queued action.")
+    queue_dismiss_parser.add_argument("action_id", type=int)
+    queue_subparsers.add_parser("execute", help="Execute all approved actions.")
+    queue_undo_parser = queue_subparsers.add_parser("undo", help="Undo one executed action.")
+    queue_undo_parser.add_argument("action_id", type=int)
 
     subparsers.add_parser("scan-apps", help="Refresh the installed app inventory and usage signals.")
 
@@ -109,10 +132,12 @@ def _run_hotspot_scan(config_path: Path, json_output: bool, html_only: bool) -> 
         started_at = datetime.now(timezone.utc)
         scan_run_id = create_scan_run(connection, ScanRunRecord(scan_type="hotspot", started_at=started_at.isoformat()))
         result = scan_hotspots(config.hotspot_scan)
+        queue_summary = fetch_queue_summary(connection)
         report_path = write_hotspot_report(
             config.report_directory,
             result,
             keep_count=config.hotspot_scan.html_reports_to_keep,
+            queue_summary=queue_summary,
         )
         insert_hotspot_findings(
             connection,
@@ -187,6 +212,81 @@ def _run_hotspot_scan(config_path: Path, json_output: bool, html_only: bool) -> 
         connection.close()
 
 
+def _queue_row_to_dict(row) -> dict:
+    return {
+        "id": row["id"],
+        "action_type": row["action_type"],
+        "state": row["state"],
+        "human_summary": row["human_summary"],
+        "payload": json.loads(row["payload_json"]),
+        "rollback_payload": json.loads(row["rollback_payload_json"]) if row["rollback_payload_json"] else None,
+        "created_at": row["created_at"],
+        "updated_at": row["updated_at"],
+        "approved_at": row["approved_at"],
+        "executed_at": row["executed_at"],
+        "undone_at": row["undone_at"],
+        "failure_message": row["failure_message"],
+    }
+
+
+def _run_queue_command(config_path: Path, args: argparse.Namespace) -> int:
+    config = load_config(config_path)
+    connection = open_database(config.database_path)
+    try:
+        if args.queue_command == "list":
+            rows = list_action_queue_records(connection)
+            if args.json:
+                print(json.dumps([_queue_row_to_dict(row) for row in rows], indent=2))
+                return 0
+            print(f"Queued actions: {len(rows)}")
+            for row in rows:
+                print(f"- #{row['id']} | {row['state']} | {row['action_type']} | {row['human_summary']}")
+            return 0
+
+        if args.queue_command == "show":
+            row = fetch_action_queue_record(connection, args.action_id)
+            if row is None:
+                raise ValueError(f"Action {args.action_id} does not exist.")
+            payload = _queue_row_to_dict(row)
+            payload["execution_logs"] = [dict(item) for item in fetch_action_logs(connection, "action_execution_log", args.action_id)]
+            payload["undo_logs"] = [dict(item) for item in fetch_action_logs(connection, "action_undo_log", args.action_id)]
+            if args.json:
+                print(json.dumps(payload, indent=2))
+                return 0
+            print(f"Action #{row['id']} | {row['state']} | {row['action_type']}")
+            print(row["human_summary"])
+            print(json.dumps(payload["payload"], indent=2))
+            return 0
+
+        if args.queue_command == "approve":
+            result = approve_action(connection, args.action_id)
+            print(result.message)
+            return 0
+
+        if args.queue_command == "dismiss":
+            result = dismiss_action(connection, args.action_id)
+            print(result.message)
+            return 0
+
+        if args.queue_command == "execute":
+            results = execute_approved_actions(connection)
+            if not results:
+                print("No approved actions to execute.")
+                return 0
+            for result in results:
+                print(f"#{result.action_id} | {result.state} | {result.message}")
+            return 0
+
+        if args.queue_command == "undo":
+            result = undo_action(connection, args.action_id)
+            print(result.message)
+            return 0
+
+        raise ValueError(f"Unsupported queue command: {args.queue_command}")
+    finally:
+        connection.close()
+
+
 def _run_app_scan(config_path: Path) -> tuple[int, list[AppInventoryRecord], Path]:
     config = load_config(config_path)
     connection = open_database(config.database_path)
@@ -256,6 +356,8 @@ def main(argv: list[str] | None = None) -> int:
         return _run_cleanup(config_path, dry_run=args.dry_run)
     if args.command == "scan-hotspots":
         return _run_hotspot_scan(config_path, json_output=args.json, html_only=args.html_only)
+    if args.command == "queue":
+        return _run_queue_command(config_path, args)
     if args.command == "scan-apps":
         code, _, _ = _run_app_scan(config_path)
         return code

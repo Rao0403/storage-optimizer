@@ -18,7 +18,9 @@ def _format_bytes(size_bytes: int) -> str:
     return f"{size_bytes} B"
 
 
-def write_hotspot_report(report_directory: Path, result: HotspotScanResult, keep_count: int) -> Path:
+def write_hotspot_report(
+    report_directory: Path, result: HotspotScanResult, keep_count: int, queue_summary: dict[str, int] | None = None
+) -> Path:
     report_directory.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
     report_path = report_directory / f"hotspots-{timestamp}.html"
@@ -67,6 +69,8 @@ def write_hotspot_report(report_directory: Path, result: HotspotScanResult, keep
             f"<div class='card'><strong>Findings</strong><br>{len(result.findings)}</div>"
             f"<div class='card'><strong>Total observed size</strong><br>{_format_bytes(result.total_size_bytes)}</div>"
             f"<div class='card'><strong>Predicted savings</strong><br>{_format_bytes(result.total_reclaimable_bytes)}</div>"
+            f"<div class='card'><strong>Pending actions</strong><br>{(queue_summary or {}).get('pending', 0)}</div>"
+            f"<div class='card'><strong>Executed actions</strong><br>{(queue_summary or {}).get('executed', 0)}</div>"
             "</div>"
             + "".join(sections)
             + "</body></html>"

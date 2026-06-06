@@ -41,6 +41,13 @@ The uninstall side is intentionally advisory in v1. Windows uninstall metadata i
 - Reversible `move_file` actions are fully supported now; `delete_cache` and `relocate_app` action types are reserved for later feature slices.
 - Hotspot HTML reports now include queue state counts.
 
+## V2 feature 3
+
+- `scan-dev-caches` and `recommend dev-caches` commands for Node and Python cache cleanup.
+- Detection for npm, pnpm, Yarn, pip, Conda, and Anaconda package caches.
+- Static HTML report for developer-cache findings with reclaim methods and side effects.
+- Optional queue creation for `delete_cache` actions so cleanup still follows review and approval.
+
 ## Project layout
 
 ```text
@@ -113,6 +120,13 @@ python -m storage_genius --config config.json queue execute
 python -m storage_genius --config config.json queue undo 1
 ```
 
+10. Scan and queue developer-cache recommendations:
+
+```powershell
+python -m storage_genius --config config.json scan-dev-caches
+python -m storage_genius --config config.json recommend dev-caches --enqueue
+```
+
 ## Config example
 
 Use [`config.example.json`](./config.example.json) as a starting point.
@@ -132,6 +146,11 @@ Key fields:
 - `hotspot_scan.large_file_threshold_mb`: minimum size for file and directory findings.
 - `hotspot_scan.max_depth`: recursive depth for directory sizing.
 - `hotspot_scan.html_reports_to_keep`: how many old hotspot reports to retain.
+- `dev_cleanup.enabled`: master switch for developer-cache recommendations.
+- `dev_cleanup.node.enabled`: include Node cache paths.
+- `dev_cleanup.python.enabled`: include Python cache paths.
+- `dev_cleanup.extra_paths`: opt-in extra cache folders to include.
+- `dev_cleanup.exclude_paths`: cache paths the recommendation layer should skip.
 
 ## Important limitations
 

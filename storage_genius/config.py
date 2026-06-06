@@ -40,12 +40,27 @@ class HotspotScanConfig:
 
 
 @dataclass(slots=True)
+class DevCleanupToolConfig:
+    enabled: bool = True
+
+
+@dataclass(slots=True)
+class DevCleanupConfig:
+    enabled: bool = True
+    node: DevCleanupToolConfig = field(default_factory=DevCleanupToolConfig)
+    python: DevCleanupToolConfig = field(default_factory=DevCleanupToolConfig)
+    extra_paths: list[Path] = field(default_factory=list)
+    exclude_paths: list[Path] = field(default_factory=list)
+
+
+@dataclass(slots=True)
 class Config:
     database_path: Path
     cleanup_rules: list[CleanupRule]
     app_audit: AppAuditConfig
     report_directory: Path
     hotspot_scan: HotspotScanConfig
+    dev_cleanup: DevCleanupConfig
 
 
 DEFAULT_CONFIG: dict[str, Any] = {
@@ -93,6 +108,19 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "max_depth": 4,
         "html_reports_to_keep": 10,
     },
+    "dev_cleanup": {
+        "enabled": True,
+        "node": {
+            "enabled": True,
+        },
+        "python": {
+            "enabled": True,
+        },
+        "extra_paths": [],
+        "exclude_paths": [
+            r"%LOCALAPPDATA%\StorageGenius",
+        ],
+    },
 }
 
 
@@ -123,6 +151,18 @@ def _load_hotspot_scan_config(raw: dict[str, Any]) -> HotspotScanConfig:
     )
 
 
+def _load_dev_cleanup_config(raw: dict[str, Any]) -> DevCleanupConfig:
+    node_raw = raw.get("node", {})
+    python_raw = raw.get("python", {})
+    return DevCleanupConfig(
+        enabled=bool(raw.get("enabled", True)),
+        node=DevCleanupToolConfig(enabled=bool(node_raw.get("enabled", True))),
+        python=DevCleanupToolConfig(enabled=bool(python_raw.get("enabled", True))),
+        extra_paths=[_expand_path(item) for item in raw.get("extra_paths", [])],
+        exclude_paths=[_expand_path(item) for item in raw.get("exclude_paths", [])],
+    )
+
+
 def load_config(path: Path) -> Config:
     payload = json.loads(path.read_text(encoding="utf-8"))
     cleanup_rules = [_load_cleanup_rule(item) for item in payload["cleanup_rules"]]
@@ -133,6 +173,7 @@ def load_config(path: Path) -> Config:
         ignored_name_fragments=[str(item).lower() for item in app_raw.get("ignored_name_fragments", [])],
     )
     hotspot_scan = _load_hotspot_scan_config(payload.get("hotspot_scan", {}))
+    dev_cleanup = _load_dev_cleanup_config(payload.get("dev_cleanup", {}))
     database_path = _expand_path(payload.get("database_path", DEFAULT_CONFIG["database_path"]))
     report_directory = _expand_path(payload.get("report_directory", DEFAULT_CONFIG["report_directory"]))
     return Config(
@@ -141,4 +182,5 @@ def load_config(path: Path) -> Config:
         app_audit=app_audit,
         report_directory=report_directory,
         hotspot_scan=hotspot_scan,
+        dev_cleanup=dev_cleanup,
     )

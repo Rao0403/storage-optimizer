@@ -46,5 +46,18 @@
     "large_file_threshold_mb": 250,
     "max_depth": 4,
     "html_reports_to_keep": 10
+  },
+  "dev_cleanup": {
+    "enabled": true,
+    "node": {
+      "enabled": true
+    },
+    "python": {
+      "enabled": true
+    },
+    "extra_paths": [],
+    "exclude_paths": [
+      "%LOCALAPPDATA%\\StorageGenius"
+    ]
   }
 }

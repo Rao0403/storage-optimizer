@@ -7,6 +7,7 @@ from pathlib import Path
 
 from .app_usage import build_inventory_records, is_likely_user_facing_app, read_userassist_entries
 from .config import default_config_text, load_config
+from .dev_cleanup import finding_to_details_json, scan_dev_caches
 from .db import (
     ACTION_STATES,
     AppInventoryRecord,
@@ -30,7 +31,7 @@ from .db import (
 from .file_rules import execute_planned_moves, plan_moves
 from .hotspots import scan_hotspots
 from .queue_actions import approve_action, dismiss_action, execute_approved_actions, undo_action
-from .reports import write_hotspot_report
+from .reports import write_dev_cache_report, write_hotspot_report
 from .windows_apps import list_installed_apps
 
 
@@ -64,6 +65,15 @@ def build_parser() -> argparse.ArgumentParser:
     queue_subparsers.add_parser("execute", help="Execute all approved actions.")
     queue_undo_parser = queue_subparsers.add_parser("undo", help="Undo one executed action.")
     queue_undo_parser.add_argument("action_id", type=int)
+
+    dev_cache_parser = subparsers.add_parser("scan-dev-caches", help="Scan Node and Python developer caches.")
+    dev_cache_parser.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
+
+    recommend_parser = subparsers.add_parser("recommend", help="Build or enqueue recommendations.")
+    recommend_subparsers = recommend_parser.add_subparsers(dest="recommend_command", required=True)
+    recommend_dev_cache = recommend_subparsers.add_parser("dev-caches", help="Recommend developer cache cleanup actions.")
+    recommend_dev_cache.add_argument("--enqueue", action="store_true", help="Queue cache deletion actions instead of only reporting.")
+    recommend_dev_cache.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
 
     subparsers.add_parser("scan-apps", help="Refresh the installed app inventory and usage signals.")
 
@@ -287,6 +297,93 @@ def _run_queue_command(config_path: Path, args: argparse.Namespace) -> int:
         connection.close()
 
 
+def _scan_dev_caches(config_path: Path, json_output: bool, enqueue: bool) -> int:
+    config = load_config(config_path)
+    connection = open_database(config.database_path)
+    try:
+        findings = scan_dev_caches(config.dev_cleanup)
+        started_at = datetime.now(timezone.utc)
+        scan_run_id = create_scan_run(connection, ScanRunRecord(scan_type="dev_caches", started_at=started_at.isoformat()))
+        insert_hotspot_findings(
+            connection,
+            [
+                HotspotFindingRecord(
+                    scan_run_id=scan_run_id,
+                    root_path=str(finding.path.parent),
+                    path=str(finding.path),
+                    item_type="directory" if finding.path.is_dir() else "file",
+                    category="developer caches",
+                    size_bytes=finding.size_bytes,
+                    reclaimable_bytes=finding.size_bytes,
+                    action_type_hint="delete_cache",
+                    confidence="high",
+                    details_json=finding_to_details_json(finding),
+                )
+                for finding in findings
+            ],
+        )
+        report_path = write_dev_cache_report(config.report_directory, findings, keep_count=config.hotspot_scan.html_reports_to_keep)
+        finalize_scan_run(
+            connection,
+            scan_run_id,
+            ScanRunRecord(
+                scan_type="dev_caches",
+                started_at=started_at.isoformat(),
+                completed_at=datetime.now(timezone.utc).isoformat(),
+                roots_json=json.dumps([str(finding.path) for finding in findings]),
+                report_path=str(report_path),
+                total_size_bytes=sum(finding.size_bytes for finding in findings),
+                total_reclaimable_bytes=sum(finding.size_bytes for finding in findings),
+            ),
+        )
+
+        queued_action_ids: list[int] = []
+        if enqueue:
+            for finding in findings:
+                action_id = create_action_queue_record(
+                    connection,
+                    ActionQueueRecord(
+                        action_type="delete_cache",
+                        state="pending",
+                        payload_json=json.dumps({"target_path": str(finding.path), "ecosystem": finding.ecosystem}),
+                        created_at=datetime.now(timezone.utc).isoformat(),
+                        human_summary=f"Delete {finding.ecosystem} cache at {finding.path}",
+                    ),
+                )
+                queued_action_ids.append(action_id)
+
+        payload = {
+            "report_path": str(report_path),
+            "findings": [
+                {
+                    "ecosystem": finding.ecosystem,
+                    "name": finding.name,
+                    "path": str(finding.path),
+                    "size_bytes": finding.size_bytes,
+                    "reclaim_method": finding.reclaim_method,
+                    "expected_side_effects": finding.expected_side_effects,
+                }
+                for finding in findings
+            ],
+            "queued_action_ids": queued_action_ids,
+        }
+
+        if json_output:
+            print(json.dumps(payload, indent=2))
+            return 0
+
+        label = "Developer cache recommendations queued" if enqueue else "Developer cache scan complete"
+        print(f"{label}. Findings: {len(findings)}.")
+        print(f"HTML report: {report_path}")
+        if queued_action_ids:
+            print(f"Queued actions: {', '.join(str(item) for item in queued_action_ids)}")
+        for finding in findings:
+            print(f"- {finding.ecosystem} | {finding.path} | {finding.size_bytes / 1024 / 1024:.1f} MB")
+        return 0
+    finally:
+        connection.close()
+
+
 def _run_app_scan(config_path: Path) -> tuple[int, list[AppInventoryRecord], Path]:
     config = load_config(config_path)
     connection = open_database(config.database_path)
@@ -356,8 +453,15 @@ def main(argv: list[str] | None = None) -> int:
         return _run_cleanup(config_path, dry_run=args.dry_run)
     if args.command == "scan-hotspots":
         return _run_hotspot_scan(config_path, json_output=args.json, html_only=args.html_only)
+    if args.command == "scan-dev-caches":
+        return _scan_dev_caches(config_path, json_output=args.json, enqueue=False)
     if args.command == "queue":
         return _run_queue_command(config_path, args)
+    if args.command == "recommend":
+        if args.recommend_command == "dev-caches":
+            return _scan_dev_caches(config_path, json_output=args.json, enqueue=args.enqueue)
+        parser.error("Unknown recommend command")
+        return 2
     if args.command == "scan-apps":
         code, _, _ = _run_app_scan(config_path)
         return code

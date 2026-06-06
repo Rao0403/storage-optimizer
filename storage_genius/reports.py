@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from .hotspots import HotspotFinding, HotspotScanResult
+from .dev_cleanup import DevCacheFinding
 
 
 def _format_bytes(size_bytes: int) -> str:
@@ -85,4 +86,55 @@ def write_hotspot_report(
         except OSError:
             continue
 
+    return report_path
+
+
+def write_dev_cache_report(report_directory: Path, findings: list[DevCacheFinding], keep_count: int) -> Path:
+    report_directory.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    report_path = report_directory / f"dev-caches-{timestamp}.html"
+
+    rows = []
+    total_size_bytes = 0
+    for finding in findings:
+        total_size_bytes += finding.size_bytes
+        rows.append(
+            "<tr>"
+            f"<td>{html.escape(finding.ecosystem)}</td>"
+            f"<td>{html.escape(finding.name)}</td>"
+            f"<td>{html.escape(str(finding.path))}</td>"
+            f"<td>{_format_bytes(finding.size_bytes)}</td>"
+            f"<td>{html.escape(finding.reclaim_method)}</td>"
+            f"<td>{html.escape(finding.expected_side_effects)}</td>"
+            "</tr>"
+        )
+
+    report_path.write_text(
+        (
+            "<!doctype html><html><head><meta charset='utf-8'>"
+            "<title>StorageGenius Developer Cache Report</title>"
+            "<style>"
+            "body{font-family:Segoe UI,Arial,sans-serif;margin:32px;background:#eef4ea;color:#1f2922;}"
+            "h1{font-family:Georgia,serif;}"
+            ".card{background:#f8fff4;border:1px solid #cfe0bf;padding:16px;border-radius:12px;display:inline-block;margin:0 12px 24px 0;}"
+            "table{width:100%;border-collapse:collapse;background:white;}"
+            "th,td{padding:10px;border-bottom:1px solid #dde7d6;text-align:left;vertical-align:top;}"
+            "th{background:#d9e8cd;}"
+            "</style></head><body>"
+            "<h1>StorageGenius Developer Cache Report</h1>"
+            f"<div class='card'><strong>Findings</strong><br>{len(findings)}</div>"
+            f"<div class='card'><strong>Predicted savings</strong><br>{_format_bytes(total_size_bytes)}</div>"
+            "<table><thead><tr><th>Ecosystem</th><th>Name</th><th>Path</th><th>Size</th><th>Reclaim method</th><th>Expected side effects</th></tr></thead>"
+            f"<tbody>{''.join(rows)}</tbody></table>"
+            "</body></html>"
+        ),
+        encoding="utf-8",
+    )
+
+    reports = sorted(report_directory.glob("dev-caches-*.html"), key=lambda item: item.stat().st_mtime, reverse=True)
+    for stale_report in reports[keep_count:]:
+        try:
+            stale_report.unlink()
+        except OSError:
+            continue
     return report_path

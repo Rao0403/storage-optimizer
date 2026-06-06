@@ -68,6 +68,17 @@ class DevCleanupConfig:
 
 
 @dataclass(slots=True)
+class RelocationConfig:
+    enabled: bool = False
+    target_root: Path = Path(r"D:\StorageGeniusRelocatedApps")
+    minimum_size_gb: int = 2
+    exclude_publishers: list[str] = field(default_factory=list)
+    exclude_paths: list[Path] = field(default_factory=list)
+    staging_suffix: str = ".sg-staging"
+    backup_suffix: str = ".sg-backup"
+
+
+@dataclass(slots=True)
 class Config:
     database_path: Path
     cleanup_rules: list[CleanupRule]
@@ -76,6 +87,7 @@ class Config:
     hotspot_scan: HotspotScanConfig
     dev_cleanup: DevCleanupConfig
     activitywatch: ActivityWatchConfig
+    relocation: RelocationConfig
 
 
 DEFAULT_CONFIG: dict[str, Any] = {
@@ -146,6 +158,22 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "base_url": "http://localhost:5600",
         "lookback_days": 30,
     },
+    "relocation": {
+        "enabled": False,
+        "target_root": r"D:\StorageGeniusRelocatedApps",
+        "minimum_size_gb": 2,
+        "exclude_publishers": [
+            "Microsoft",
+        ],
+        "exclude_paths": [
+            r"C:\Windows",
+            r"C:\Program Files\Common Files",
+            r"C:\Program Files (x86)\Common Files",
+            r"C:\Program Files\WindowsApps",
+        ],
+        "staging_suffix": ".sg-staging",
+        "backup_suffix": ".sg-backup",
+    },
 }
 
 
@@ -188,6 +216,18 @@ def _load_dev_cleanup_config(raw: dict[str, Any]) -> DevCleanupConfig:
     )
 
 
+def _load_relocation_config(raw: dict[str, Any]) -> RelocationConfig:
+    return RelocationConfig(
+        enabled=bool(raw.get("enabled", False)),
+        target_root=_expand_path(raw.get("target_root", r"D:\StorageGeniusRelocatedApps")),
+        minimum_size_gb=int(raw.get("minimum_size_gb", 2)),
+        exclude_publishers=[str(item).lower() for item in raw.get("exclude_publishers", ["Microsoft"])],
+        exclude_paths=[_expand_path(item) for item in raw.get("exclude_paths", [])],
+        staging_suffix=str(raw.get("staging_suffix", ".sg-staging")),
+        backup_suffix=str(raw.get("backup_suffix", ".sg-backup")),
+    )
+
+
 def load_config(path: Path) -> Config:
     payload = json.loads(path.read_text(encoding="utf-8"))
     cleanup_rules = [_load_cleanup_rule(item) for item in payload["cleanup_rules"]]
@@ -210,6 +250,7 @@ def load_config(path: Path) -> Config:
         base_url=str(activitywatch_raw.get("base_url", "http://localhost:5600")).rstrip("/"),
         lookback_days=int(activitywatch_raw.get("lookback_days", 30)),
     )
+    relocation = _load_relocation_config(payload.get("relocation", {}))
     database_path = _expand_path(payload.get("database_path", DEFAULT_CONFIG["database_path"]))
     report_directory = _expand_path(payload.get("report_directory", DEFAULT_CONFIG["report_directory"]))
     return Config(
@@ -220,4 +261,5 @@ def load_config(path: Path) -> Config:
         hotspot_scan=hotspot_scan,
         dev_cleanup=dev_cleanup,
         activitywatch=activitywatch,
+        relocation=relocation,
     )

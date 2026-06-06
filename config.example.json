@@ -69,5 +69,21 @@
     "exclude_paths": [
       "%LOCALAPPDATA%\\StorageGenius"
     ]
+  },
+  "relocation": {
+    "enabled": false,
+    "target_root": "D:\\StorageGeniusRelocatedApps",
+    "minimum_size_gb": 2,
+    "exclude_publishers": [
+      "Microsoft"
+    ],
+    "exclude_paths": [
+      "C:\\Windows",
+      "C:\\Program Files\\Common Files",
+      "C:\\Program Files (x86)\\Common Files",
+      "C:\\Program Files\\WindowsApps"
+    ],
+    "staging_suffix": ".sg-staging",
+    "backup_suffix": ".sg-backup"
   }
 }

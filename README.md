@@ -55,6 +55,13 @@ The uninstall side is intentionally advisory in v1. Windows uninstall metadata i
 - Estimated install size, usage confidence, and candidate action stored with each app.
 - `report apps` groups results into uninstall candidates, uncertain inactive apps, and likely active apps.
 
+## V2 feature 5
+
+- `scan-relocation` and `recommend relocation` commands for large app relocation candidates.
+- Conservative candidate filtering based on install path, size, excluded publishers, and service-backed paths.
+- Queue-driven relocation execution with copy, verify, junction cutover, and undo support.
+- Static HTML report for relocation candidates with risk flags and destination paths.
+
 ## Project layout
 
 ```text
@@ -142,6 +149,13 @@ python -m storage_genius --config config.json report apps
 python -m storage_genius --config config.json report apps --json
 ```
 
+12. Scan and queue relocation candidates:
+
+```powershell
+python -m storage_genius --config config.json scan-relocation
+python -m storage_genius --config config.json recommend relocation --enqueue
+```
+
 ## Config example
 
 Use [`config.example.json`](./config.example.json) as a starting point.
@@ -171,6 +185,12 @@ Key fields:
 - `activitywatch.lookback_days`: how much recent ActivityWatch history to consider.
 - `app_audit.minimum_candidate_size_mb`: minimum installed size for uninstall suggestions.
 - `app_audit.score_thresholds`: score cutoffs for uninstall review and likely-active grouping.
+- `relocation.enabled`: enable relocation scanning and recommendation commands.
+- `relocation.target_root`: destination root for relocated apps.
+- `relocation.minimum_size_gb`: minimum install size before relocation is considered.
+- `relocation.exclude_publishers`: publishers to skip entirely.
+- `relocation.exclude_paths`: install roots that should never be relocated.
+- `relocation.staging_suffix` and `relocation.backup_suffix`: internal safety suffixes for cutover and rollback.
 
 ## Important limitations
 

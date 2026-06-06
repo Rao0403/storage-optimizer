@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import sqlite3
+import subprocess
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -214,9 +216,105 @@ def _undo_delete_cache(payload: dict) -> tuple[str, bool]:
     return (f"Cache deletion at {payload.get('target_path', 'unknown path')} is not restorable.", False)
 
 
+def _directory_stats(path: Path) -> tuple[int, int]:
+    total_bytes = 0
+    total_files = 0
+    stack = [path]
+    while stack:
+        current = stack.pop()
+        try:
+            with os.scandir(current) as entries:
+                for entry in entries:
+                    try:
+                        if entry.is_symlink():
+                            continue
+                        if entry.is_file():
+                            total_bytes += entry.stat().st_size
+                            total_files += 1
+                        elif entry.is_dir():
+                            stack.append(Path(entry.path))
+                    except OSError:
+                        continue
+        except OSError:
+            continue
+    return total_bytes, total_files
+
+
+def _create_junction(link_path: Path, target_path: Path) -> None:
+    subprocess.run(
+        ["cmd", "/c", "mklink", "/J", str(link_path), str(target_path)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+
+def _remove_junction(link_path: Path) -> None:
+    os.rmdir(link_path)
+
+
 def _execute_relocate_app(payload: dict) -> tuple[dict, str]:
-    raise NotImplementedError("Relocation execution is not available until the relocation feature lands.")
+    source_path = Path(payload["source_path"])
+    destination_path = Path(payload["destination_path"])
+    staging_path = Path(payload.get("staging_path", str(destination_path) + payload.get("staging_suffix", ".sg-staging")))
+    backup_path = Path(payload.get("backup_path", str(source_path) + payload.get("backup_suffix", ".sg-backup")))
+
+    if not source_path.exists() or not source_path.is_dir():
+        raise FileNotFoundError(f"Source app path not found: {source_path}")
+    if destination_path.exists() or staging_path.exists() or backup_path.exists():
+        raise FileExistsError("Destination, staging, or backup path already exists.")
+
+    source_stats = _directory_stats(source_path)
+    destination_path.parent.mkdir(parents=True, exist_ok=True)
+
+    try:
+        shutil.copytree(source_path, staging_path)
+        staging_stats = _directory_stats(staging_path)
+        if staging_stats != source_stats:
+            raise RuntimeError("Copied app payload does not match source contents.")
+
+        source_path.rename(backup_path)
+        shutil.move(str(staging_path), str(destination_path))
+        _create_junction(source_path, destination_path)
+        resolved = Path(os.path.realpath(source_path))
+        if resolved != destination_path.resolve():
+            raise RuntimeError("Junction validation failed.")
+        shutil.rmtree(backup_path)
+    except Exception:  # noqa: BLE001
+        if source_path.exists() and source_path.is_dir() and os.path.realpath(source_path) == str(destination_path):
+            try:
+                _remove_junction(source_path)
+            except OSError:
+                pass
+        if backup_path.exists() and not source_path.exists():
+            backup_path.rename(source_path)
+        if staging_path.exists():
+            shutil.rmtree(staging_path, ignore_errors=True)
+        if destination_path.exists():
+            shutil.rmtree(destination_path, ignore_errors=True)
+        raise
+
+    return (
+        {
+            "source_path": str(source_path),
+            "destination_path": str(destination_path),
+            "backup_path": str(backup_path),
+            "restorable": True,
+        },
+        f"Relocated app from {source_path} to {destination_path}.",
+    )
 
 
 def _undo_relocate_app(payload: dict) -> tuple[str, bool]:
-    raise NotImplementedError("Relocation undo is not available until the relocation feature lands.")
+    source_path = Path(payload["source_path"])
+    destination_path = Path(payload["destination_path"])
+
+    if not destination_path.exists():
+        raise FileNotFoundError(f"Relocated app payload missing at {destination_path}")
+    if source_path.exists() and os.path.realpath(source_path) != str(destination_path):
+        raise FileExistsError(f"Cannot restore because source path is occupied: {source_path}")
+
+    if source_path.exists():
+        _remove_junction(source_path)
+    shutil.move(str(destination_path), str(source_path))
+    return f"Restored relocated app back to {source_path}.", True

@@ -31,7 +31,8 @@ from .db import (
 from .file_rules import execute_planned_moves, plan_moves
 from .hotspots import scan_hotspots
 from .queue_actions import approve_action, dismiss_action, execute_approved_actions, undo_action
-from .reports import write_dev_cache_report, write_hotspot_report
+from .relocation import scan_relocation_candidates
+from .reports import write_dev_cache_report, write_hotspot_report, write_relocation_report
 from .windows_apps import list_installed_apps
 
 
@@ -69,11 +70,17 @@ def build_parser() -> argparse.ArgumentParser:
     dev_cache_parser = subparsers.add_parser("scan-dev-caches", help="Scan Node and Python developer caches.")
     dev_cache_parser.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
 
+    relocation_parser = subparsers.add_parser("scan-relocation", help="Scan for app relocation candidates.")
+    relocation_parser.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
+
     recommend_parser = subparsers.add_parser("recommend", help="Build or enqueue recommendations.")
     recommend_subparsers = recommend_parser.add_subparsers(dest="recommend_command", required=True)
     recommend_dev_cache = recommend_subparsers.add_parser("dev-caches", help="Recommend developer cache cleanup actions.")
     recommend_dev_cache.add_argument("--enqueue", action="store_true", help="Queue cache deletion actions instead of only reporting.")
     recommend_dev_cache.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
+    recommend_relocation = recommend_subparsers.add_parser("relocation", help="Recommend app relocation actions.")
+    recommend_relocation.add_argument("--enqueue", action="store_true", help="Queue relocation actions instead of only reporting.")
+    recommend_relocation.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
 
     subparsers.add_parser("scan-apps", help="Refresh the installed app inventory and usage signals.")
 
@@ -386,6 +393,109 @@ def _scan_dev_caches(config_path: Path, json_output: bool, enqueue: bool) -> int
         connection.close()
 
 
+def _scan_relocation(config_path: Path, json_output: bool, enqueue: bool) -> int:
+    config = load_config(config_path)
+    connection = open_database(config.database_path)
+    try:
+        apps = list_installed_apps()
+        findings = scan_relocation_candidates(apps, config.relocation)
+        started_at = datetime.now(timezone.utc)
+        scan_run_id = create_scan_run(connection, ScanRunRecord(scan_type="relocation", started_at=started_at.isoformat()))
+        insert_hotspot_findings(
+            connection,
+            [
+                HotspotFindingRecord(
+                    scan_run_id=scan_run_id,
+                    root_path=str(finding.install_location.parent),
+                    path=str(finding.install_location),
+                    item_type="directory",
+                    category="app relocation candidates",
+                    size_bytes=finding.size_bytes,
+                    reclaimable_bytes=finding.size_bytes,
+                    action_type_hint="relocate_app",
+                    confidence=finding.confidence,
+                    details_json=json.dumps({"risk_flags": finding.risk_flags}, sort_keys=True),
+                )
+                for finding in findings
+            ],
+        )
+        report_path = write_relocation_report(
+            config.report_directory,
+            findings,
+            keep_count=config.hotspot_scan.html_reports_to_keep,
+        )
+        finalize_scan_run(
+            connection,
+            scan_run_id,
+            ScanRunRecord(
+                scan_type="relocation",
+                started_at=started_at.isoformat(),
+                completed_at=datetime.now(timezone.utc).isoformat(),
+                roots_json=json.dumps([str(finding.install_location) for finding in findings]),
+                report_path=str(report_path),
+                total_size_bytes=sum(finding.size_bytes for finding in findings),
+                total_reclaimable_bytes=sum(finding.size_bytes for finding in findings),
+            ),
+        )
+
+        queued_action_ids: list[int] = []
+        if enqueue:
+            for finding in findings:
+                action_id = create_action_queue_record(
+                    connection,
+                    ActionQueueRecord(
+                        action_type="relocate_app",
+                        state="pending",
+                        payload_json=json.dumps(
+                            {
+                                "app_name": finding.app_name,
+                                "source_path": str(finding.install_location),
+                                "destination_path": str(finding.destination_path),
+                                "backup_path": str(finding.install_location) + config.relocation.backup_suffix,
+                                "staging_path": str(finding.destination_path) + config.relocation.staging_suffix,
+                                "backup_suffix": config.relocation.backup_suffix,
+                                "staging_suffix": config.relocation.staging_suffix,
+                            }
+                        ),
+                        created_at=datetime.now(timezone.utc).isoformat(),
+                        human_summary=f"Relocate {finding.app_name} to {finding.destination_path}",
+                    ),
+                )
+                queued_action_ids.append(action_id)
+
+        payload = {
+            "report_path": str(report_path),
+            "findings": [
+                {
+                    "app_name": finding.app_name,
+                    "install_location": str(finding.install_location),
+                    "destination_path": str(finding.destination_path),
+                    "size_bytes": finding.size_bytes,
+                    "risk_flags": finding.risk_flags,
+                    "confidence": finding.confidence,
+                }
+                for finding in findings
+            ],
+            "queued_action_ids": queued_action_ids,
+        }
+
+        if json_output:
+            print(json.dumps(payload, indent=2))
+            return 0
+
+        label = "Relocation recommendations queued" if enqueue else "Relocation scan complete"
+        print(f"{label}. Findings: {len(findings)}.")
+        print(f"HTML report: {report_path}")
+        if queued_action_ids:
+            print(f"Queued actions: {', '.join(str(item) for item in queued_action_ids)}")
+        for finding in findings:
+            size_gb = finding.size_bytes / 1024 / 1024 / 1024
+            print(f"- {finding.app_name} | {finding.install_location} -> {finding.destination_path} | {size_gb:.1f} GB")
+        return 0
+    finally:
+        connection.close()
+
+
 def _run_app_scan(config_path: Path) -> tuple[int, list[AppInventoryRecord], Path]:
     config = load_config(config_path)
     connection = open_database(config.database_path)
@@ -509,11 +619,15 @@ def main(argv: list[str] | None = None) -> int:
         return _run_hotspot_scan(config_path, json_output=args.json, html_only=args.html_only)
     if args.command == "scan-dev-caches":
         return _scan_dev_caches(config_path, json_output=args.json, enqueue=False)
+    if args.command == "scan-relocation":
+        return _scan_relocation(config_path, json_output=args.json, enqueue=False)
     if args.command == "queue":
         return _run_queue_command(config_path, args)
     if args.command == "recommend":
         if args.recommend_command == "dev-caches":
             return _scan_dev_caches(config_path, json_output=args.json, enqueue=args.enqueue)
+        if args.recommend_command == "relocation":
+            return _scan_relocation(config_path, json_output=args.json, enqueue=args.enqueue)
         parser.error("Unknown recommend command")
         return 2
     if args.command == "scan-apps":

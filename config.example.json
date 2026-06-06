@@ -20,6 +20,11 @@
   "app_audit": {
     "unused_days": 30,
     "minimum_install_age_days": 45,
+    "minimum_candidate_size_mb": 500,
+    "score_thresholds": {
+      "review_uninstall": 30,
+      "likely_active": 65
+    },
     "ignored_name_fragments": [
       "Security Update",
       "Update for",
@@ -28,6 +33,11 @@
       "Driver",
       "Redistributable"
     ]
+  },
+  "activitywatch": {
+    "enabled": false,
+    "base_url": "http://localhost:5600",
+    "lookback_days": 30
   },
   "hotspot_scan": {
     "roots": [

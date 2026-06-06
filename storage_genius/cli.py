@@ -5,11 +5,10 @@ import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from .app_usage import build_inventory_records, is_likely_user_facing_app, read_userassist_entries
+from .app_usage import build_inventory_records, fetch_activitywatch_entries, is_likely_user_facing_app, read_userassist_entries
 from .config import default_config_text, load_config
 from .dev_cleanup import finding_to_details_json, scan_dev_caches
 from .db import (
-    ACTION_STATES,
     AppInventoryRecord,
     ActionQueueRecord,
     FileMoveRecord,
@@ -18,6 +17,7 @@ from .db import (
     create_action_queue_record,
     create_scan_run,
     fetch_action_logs,
+    fetch_app_report_rows,
     fetch_action_queue_record,
     fetch_queue_summary,
     fetch_unused_apps,
@@ -78,7 +78,9 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser("scan-apps", help="Refresh the installed app inventory and usage signals.")
 
     report_parser = subparsers.add_parser("report", help="Show apps that appear unused.")
+    report_parser.add_argument("report_target", nargs="?", default="apps", help="Report target. Currently only 'apps' is supported.")
     report_parser.add_argument("--days", type=int, default=None, help="Override the unused-days cutoff from config.")
+    report_parser.add_argument("--min-score", type=int, default=None, help="Only include apps at or above this usage score.")
     report_parser.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
     report_parser.add_argument("--all", action="store_true", help="Include component-like packages in the report.")
 
@@ -391,12 +393,22 @@ def _run_app_scan(config_path: Path) -> tuple[int, list[AppInventoryRecord], Pat
         observed_at = datetime.now(timezone.utc)
         installed_apps = list_installed_apps()
         usage_entries = read_userassist_entries()
-        records = build_inventory_records(installed_apps, usage_entries, config.app_audit, observed_at)
+        activitywatch_entries = fetch_activitywatch_entries(config.activitywatch, observed_at)
+        records = build_inventory_records(
+            installed_apps,
+            usage_entries,
+            activitywatch_entries,
+            config.app_audit,
+            observed_at,
+        )
 
         for record in records:
             upsert_app_inventory(connection, record)
 
-        print(f"App scan complete. Inventory updated for {len(records)} apps using {len(usage_entries)} usage signals.")
+        print(
+            f"App scan complete. Inventory updated for {len(records)} apps using "
+            f"{len(usage_entries)} UserAssist signals and {len(activitywatch_entries)} ActivityWatch signals."
+        )
         return 0, records, config.database_path
     finally:
         connection.close()
@@ -413,20 +425,55 @@ def _unused_app_rows(config_path: Path, days_override: int | None):
         connection.close()
 
 
-def _run_report(config_path: Path, days_override: int | None, json_output: bool, include_all: bool) -> int:
-    rows, days = _unused_app_rows(config_path, days_override)
+def _run_report(
+    config_path: Path,
+    report_target: str,
+    days_override: int | None,
+    min_score: int | None,
+    json_output: bool,
+    include_all: bool,
+) -> int:
+    if report_target != "apps":
+        raise ValueError(f"Unsupported report target: {report_target}")
+
+    config = load_config(config_path)
+    connection = open_database(config.database_path)
+    try:
+        rows = fetch_app_report_rows(connection, min_score=min_score)
+    finally:
+        connection.close()
+
     filtered_rows = rows if include_all else [row for row in rows if is_likely_user_facing_app(row["display_name"])]
     if json_output:
         serializable = [dict(row) for row in filtered_rows]
-        print(json.dumps({"unused_days": days, "apps": serializable}, indent=2))
+        print(json.dumps({"apps": serializable}, indent=2))
         return 0
 
-    label = "All apps" if include_all else "Likely user-facing apps"
-    print(f"{label} with no tracked usage in the last {days} days: {len(filtered_rows)}")
-    for row in filtered_rows:
+    uninstall_threshold = config.app_audit.score_thresholds.get("review_uninstall", 30)
+    active_threshold = config.app_audit.score_thresholds.get("likely_active", 65)
+    uninstall_candidates = [row for row in filtered_rows if row["candidate_action"] == "review_uninstall"]
+    likely_active = [row for row in filtered_rows if row["usage_score"] >= active_threshold]
+    review_group = [
+        row for row in filtered_rows if row["candidate_action"] != "review_uninstall" and row["usage_score"] < active_threshold
+    ]
+
+    if days_override is not None:
+        print(f"Compatibility note: --days is ignored by the scored app report.")
+    print(f"Review uninstall candidates (score <= {uninstall_threshold}): {len(uninstall_candidates)}")
+    for row in uninstall_candidates[:25]:
         last_used = row["last_used"] or "never observed"
-        uninstall_hint = row["uninstall_string"] or "no uninstall command recorded"
-        print(f"- {row['display_name']} | last used: {last_used} | uninstall: {uninstall_hint}")
+        size_gb = (row["estimated_installed_size_bytes"] or 0) / 1024 / 1024 / 1024
+        print(f"- {row['display_name']} | score {row['usage_score']} | {size_gb:.1f} GB | last used: {last_used}")
+
+    print(f"Likely inactive but uncertain: {len(review_group)}")
+    for row in review_group[:25]:
+        last_used = row["last_used"] or "never observed"
+        print(f"- {row['display_name']} | score {row['usage_score']} | last used: {last_used}")
+
+    print(f"Likely active (score >= {active_threshold}): {len(likely_active)}")
+    for row in likely_active[:15]:
+        last_used = row["last_used"] or "never observed"
+        print(f"- {row['display_name']} | score {row['usage_score']} | last used: {last_used}")
     return 0
 
 
@@ -439,7 +486,14 @@ def _run_once(config_path: Path, dry_run: bool) -> int:
     if scan_code != 0:
         return scan_code
 
-    return _run_report(config_path, days_override=None, json_output=False, include_all=False)
+    return _run_report(
+        config_path,
+        report_target="apps",
+        days_override=None,
+        min_score=None,
+        json_output=False,
+        include_all=False,
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -466,7 +520,14 @@ def main(argv: list[str] | None = None) -> int:
         code, _, _ = _run_app_scan(config_path)
         return code
     if args.command == "report":
-        return _run_report(config_path, days_override=args.days, json_output=args.json, include_all=args.all)
+        return _run_report(
+            config_path,
+            report_target=args.report_target,
+            days_override=args.days,
+            min_score=args.min_score,
+            json_output=args.json,
+            include_all=args.all,
+        )
     if args.command == "run-once":
         return _run_once(config_path, dry_run=args.dry_run)
 

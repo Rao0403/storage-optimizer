@@ -48,6 +48,13 @@ The uninstall side is intentionally advisory in v1. Windows uninstall metadata i
 - Static HTML report for developer-cache findings with reclaim methods and side effects.
 - Optional queue creation for `delete_cache` actions so cleanup still follows review and approval.
 
+## V2 feature 4
+
+- Scored app usage model instead of a single last-used heuristic.
+- Optional ActivityWatch enrichment through the local REST API.
+- Estimated install size, usage confidence, and candidate action stored with each app.
+- `report apps` groups results into uninstall candidates, uncertain inactive apps, and likely active apps.
+
 ## Project layout
 
 ```text
@@ -127,6 +134,14 @@ python -m storage_genius --config config.json scan-dev-caches
 python -m storage_genius --config config.json recommend dev-caches --enqueue
 ```
 
+11. Refresh scored app usage and report it:
+
+```powershell
+python -m storage_genius --config config.json scan-apps
+python -m storage_genius --config config.json report apps
+python -m storage_genius --config config.json report apps --json
+```
+
 ## Config example
 
 Use [`config.example.json`](./config.example.json) as a starting point.
@@ -151,6 +166,11 @@ Key fields:
 - `dev_cleanup.python.enabled`: include Python cache paths.
 - `dev_cleanup.extra_paths`: opt-in extra cache folders to include.
 - `dev_cleanup.exclude_paths`: cache paths the recommendation layer should skip.
+- `activitywatch.enabled`: opt in to local ActivityWatch enrichment.
+- `activitywatch.base_url`: local ActivityWatch server URL.
+- `activitywatch.lookback_days`: how much recent ActivityWatch history to consider.
+- `app_audit.minimum_candidate_size_mb`: minimum installed size for uninstall suggestions.
+- `app_audit.score_thresholds`: score cutoffs for uninstall review and likely-active grouping.
 
 ## Important limitations
 

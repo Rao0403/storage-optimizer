@@ -29,6 +29,11 @@ class AppInventoryRecord:
     last_used: str | None
     last_seen: str
     match_reason: str | None
+    usage_score: int
+    usage_confidence: str
+    last_used_source: str | None
+    candidate_action: str
+    estimated_installed_size_bytes: int | None
 
 
 @dataclass(slots=True)
@@ -106,7 +111,12 @@ def initialize_database(connection: sqlite3.Connection) -> None:
           install_date TEXT,
           last_used TEXT,
           last_seen TEXT NOT NULL,
-          match_reason TEXT
+          match_reason TEXT,
+          usage_score INTEGER NOT NULL DEFAULT 0,
+          usage_confidence TEXT NOT NULL DEFAULT 'low',
+          last_used_source TEXT,
+          candidate_action TEXT NOT NULL DEFAULT 'review',
+          estimated_installed_size_bytes INTEGER
         );
 
         CREATE TABLE IF NOT EXISTS scan_runs (
@@ -171,7 +181,19 @@ def initialize_database(connection: sqlite3.Connection) -> None:
         );
         """
     )
+    _ensure_column(connection, "app_inventory", "usage_score", "INTEGER NOT NULL DEFAULT 0")
+    _ensure_column(connection, "app_inventory", "usage_confidence", "TEXT NOT NULL DEFAULT 'low'")
+    _ensure_column(connection, "app_inventory", "last_used_source", "TEXT")
+    _ensure_column(connection, "app_inventory", "candidate_action", "TEXT NOT NULL DEFAULT 'review'")
+    _ensure_column(connection, "app_inventory", "estimated_installed_size_bytes", "INTEGER")
     connection.commit()
+
+
+def _ensure_column(connection: sqlite3.Connection, table_name: str, column_name: str, definition: str) -> None:
+    cursor = connection.execute(f"PRAGMA table_info({table_name})")
+    existing_columns = {row["name"] for row in cursor.fetchall()}
+    if column_name not in existing_columns:
+        connection.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {definition}")
 
 
 def record_file_move(connection: sqlite3.Connection, record: FileMoveRecord) -> None:
@@ -206,9 +228,10 @@ def upsert_app_inventory(connection: sqlite3.Connection, record: AppInventoryRec
         """
         INSERT INTO app_inventory(
           app_id, display_name, publisher, install_location, display_icon,
-          uninstall_string, install_date, last_used, last_seen, match_reason
+          uninstall_string, install_date, last_used, last_seen, match_reason,
+          usage_score, usage_confidence, last_used_source, candidate_action, estimated_installed_size_bytes
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(app_id) DO UPDATE SET
           display_name = excluded.display_name,
           publisher = excluded.publisher,
@@ -221,7 +244,12 @@ def upsert_app_inventory(connection: sqlite3.Connection, record: AppInventoryRec
             ELSE app_inventory.last_used
           END,
           last_seen = excluded.last_seen,
-          match_reason = excluded.match_reason
+          match_reason = excluded.match_reason,
+          usage_score = excluded.usage_score,
+          usage_confidence = excluded.usage_confidence,
+          last_used_source = excluded.last_used_source,
+          candidate_action = excluded.candidate_action,
+          estimated_installed_size_bytes = excluded.estimated_installed_size_bytes
         """,
         (
             record.app_id,
@@ -234,6 +262,11 @@ def upsert_app_inventory(connection: sqlite3.Connection, record: AppInventoryRec
             record.last_used,
             record.last_seen,
             record.match_reason,
+            record.usage_score,
+            record.usage_confidence,
+            record.last_used_source,
+            record.candidate_action,
+            record.estimated_installed_size_bytes,
         ),
     )
     connection.commit()
@@ -249,6 +282,28 @@ def fetch_unused_apps(connection: sqlite3.Connection, cutoff_iso: str) -> list[s
         """,
         (cutoff_iso,),
     )
+    return list(cursor.fetchall())
+
+
+def fetch_app_report_rows(connection: sqlite3.Connection, min_score: int | None = None) -> list[sqlite3.Row]:
+    if min_score is None:
+        cursor = connection.execute(
+            """
+            SELECT *
+            FROM app_inventory
+            ORDER BY usage_score ASC, COALESCE(estimated_installed_size_bytes, 0) DESC, display_name COLLATE NOCASE
+            """
+        )
+    else:
+        cursor = connection.execute(
+            """
+            SELECT *
+            FROM app_inventory
+            WHERE usage_score >= ?
+            ORDER BY usage_score ASC, COALESCE(estimated_installed_size_bytes, 0) DESC, display_name COLLATE NOCASE
+            """,
+            (min_score,),
+        )
     return list(cursor.fetchall())
 
 

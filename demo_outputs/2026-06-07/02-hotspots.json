@@ -1,0 +1,206 @@
+{
+  "roots_scanned": [
+    "C:\\Users\\Aryan",
+    "C:\\Users\\Aryan\\AppData\\Local",
+    "C:\\Users\\Aryan\\AppData\\Roaming",
+    "C:\\ProgramData",
+    "C:\\Users\\Aryan\\AppData\\Local\\Temp",
+    "C:\\Windows\\Temp",
+    "C:\\Program Files",
+    "C:\\Program Files (x86)"
+  ],
+  "report_path": "C:\\Users\\Aryan\\Documents\\StorageGenius\\hotspots-20260607-173135.html",
+  "findings": [
+    {
+      "path": "C:\\Users\\Aryan\\AppData\\Local\\Temp",
+      "item_type": "directory",
+      "category": "temp files",
+      "size_bytes": 5003057219,
+      "reclaimable_bytes": 5003057219,
+      "action_type_hint": "delete_cache",
+      "confidence": "medium"
+    },
+    {
+      "path": "C:\\Program Files\\Docker",
+      "item_type": "directory",
+      "category": "app install folders",
+      "size_bytes": 3296536892,
+      "reclaimable_bytes": 0,
+      "action_type_hint": "review",
+      "confidence": "low"
+    },
+    {
+      "path": "C:\\Users\\Aryan\\AppData\\Local\\Temp\\orjjvxf1",
+      "item_type": "directory",
+      "category": "temp files",
+      "size_bytes": 3291628209,
+      "reclaimable_bytes": 3291628209,
+      "action_type_hint": "delete_cache",
+      "confidence": "medium"
+    },
+    {
+      "path": "C:\\Program Files\\MongoDB",
+      "item_type": "directory",
+      "category": "app install folders",
+      "size_bytes": 2217970254,
+      "reclaimable_bytes": 0,
+      "action_type_hint": "review",
+      "confidence": "low"
+    },
+    {
+      "path": "C:\\Program Files\\Microsoft Office",
+      "item_type": "directory",
+      "category": "app install folders",
+      "size_bytes": 1866028602,
+      "reclaimable_bytes": 0,
+      "action_type_hint": "review",
+      "confidence": "low"
+    },
+    {
+      "path": "C:\\Users\\Aryan\\AppData\\Local\\Temp",
+      "item_type": "directory",
+      "category": "temp files",
+      "size_bytes": 1605550990,
+      "reclaimable_bytes": 1605550990,
+      "action_type_hint": "delete_cache",
+      "confidence": "medium"
+    },
+    {
+      "path": "C:\\Users\\Aryan\\anaconda3\\pkgs",
+      "item_type": "directory",
+      "category": "developer caches",
+      "size_bytes": 1216294107,
+      "reclaimable_bytes": 1216294107,
+      "action_type_hint": "delete_cache",
+      "confidence": "high"
+    },
+    {
+      "path": "C:\\Program Files\\dotnet",
+      "item_type": "directory",
+      "category": "app install folders",
+      "size_bytes": 1102085054,
+      "reclaimable_bytes": 0,
+      "action_type_hint": "review",
+      "confidence": "low"
+    },
+    {
+      "path": "C:\\Program Files\\MySQL",
+      "item_type": "directory",
+      "category": "app install folders",
+      "size_bytes": 746848470,
+      "reclaimable_bytes": 0,
+      "action_type_hint": "review",
+      "confidence": "low"
+    },
+    {
+      "path": "C:\\Program Files\\DataStax Community",
+      "item_type": "directory",
+      "category": "app install folders",
+      "size_bytes": 655999461,
+      "reclaimable_bytes": 0,
+      "action_type_hint": "review",
+      "confidence": "low"
+    },
+    {
+      "path": "C:\\Program Files\\Microsoft OneDrive",
+      "item_type": "directory",
+      "category": "app install folders",
+      "size_bytes": 532828949,
+      "reclaimable_bytes": 0,
+      "action_type_hint": "review",
+      "confidence": "low"
+    },
+    {
+      "path": "C:\\Program Files\\Java",
+      "item_type": "directory",
+      "category": "app install folders",
+      "size_bytes": 509357107,
+      "reclaimable_bytes": 0,
+      "action_type_hint": "review",
+      "confidence": "low"
+    },
+    {
+      "path": "C:\\Program Files\\WSL",
+      "item_type": "directory",
+      "category": "app install folders",
+      "size_bytes": 481124011,
+      "reclaimable_bytes": 0,
+      "action_type_hint": "review",
+      "confidence": "low"
+    },
+    {
+      "path": "C:\\Program Files\\Unity Hub",
+      "item_type": "directory",
+      "category": "app install folders",
+      "size_bytes": 461671013,
+      "reclaimable_bytes": 0,
+      "action_type_hint": "review",
+      "confidence": "low"
+    },
+    {
+      "path": "C:\\Program Files\\Google",
+      "item_type": "directory",
+      "category": "app install folders",
+      "size_bytes": 412812536,
+      "reclaimable_bytes": 0,
+      "action_type_hint": "review",
+      "confidence": "low"
+    },
+    {
+      "path": "C:\\Users\\Aryan\\AppData\\Local\\Temp\\BIT1AC.tmp",
+      "item_type": "file",
+      "category": "temp files",
+      "size_bytes": 355529608,
+      "reclaimable_bytes": 355529608,
+      "action_type_hint": "delete_cache",
+      "confidence": "medium"
+    },
+    {
+      "path": "C:\\Users\\Aryan\\AppData\\Local\\Temp\\BITAB6F.tmp",
+      "item_type": "file",
+      "category": "temp files",
+      "size_bytes": 355529608,
+      "reclaimable_bytes": 355529608,
+      "action_type_hint": "delete_cache",
+      "confidence": "medium"
+    },
+    {
+      "path": "C:\\Program Files\\Eclipse Adoptium",
+      "item_type": "directory",
+      "category": "app install folders",
+      "size_bytes": 341913108,
+      "reclaimable_bytes": 0,
+      "action_type_hint": "review",
+      "confidence": "low"
+    },
+    {
+      "path": "C:\\Program Files\\Git",
+      "item_type": "directory",
+      "category": "app install folders",
+      "size_bytes": 326715412,
+      "reclaimable_bytes": 0,
+      "action_type_hint": "review",
+      "confidence": "low"
+    },
+    {
+      "path": "C:\\Users\\Aryan\\AppData\\Local\\Temp\\BITA534.tmp",
+      "item_type": "file",
+      "category": "temp files",
+      "size_bytes": 306785944,
+      "reclaimable_bytes": 306785944,
+      "action_type_hint": "delete_cache",
+      "confidence": "medium"
+    },
+    {
+      "path": "C:\\Users\\Aryan\\AppData\\Local\\Temp\\BITE9BE.tmp",
+      "item_type": "file",
+      "category": "temp files",
+      "size_bytes": 306785944,
+      "reclaimable_bytes": 306785944,
+      "action_type_hint": "delete_cache",
+      "confidence": "medium"
+    }
+  ],
+  "total_size_bytes": 25393052498,
+  "total_reclaimable_bytes": 12441161629
+}

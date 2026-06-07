@@ -1,0 +1,35 @@
+Review uninstall candidates (score <= 30): 6
+- Microsoft 365 Apps for business - en-us | score 5 | 5.6 GB | last used: never observed
+- Visual Studio Community 2019 | score 5 | 5.2 GB | last used: never observed
+- Visual Studio Build Tools 2019 (2) | score 5 | 1.4 GB | last used: never observed
+- Visual Studio Community 2022 | score 5 | 0.9 GB | last used: never observed
+- MongoDB Compass | score 5 | 0.6 GB | last used: never observed
+- MySQL Server 8.0 | score 8 | 0.5 GB | last used: 2025-11-29T00:19:46.049000+00:00
+Likely inactive but uncertain: 91
+- Eclipse Temurin JDK with Hotspot 21.0.4+7 (x64) | score 10 | last used: never observed
+- MySQL Shell 8.0.34 | score 10 | last used: never observed
+- Java(TM) SE Development Kit 22.0.2 (64-bit) | score 10 | last used: never observed
+- WebAdvisor by McAfee | score 10 | last used: never observed
+- MySQL Router 8.0 | score 10 | last used: never observed
+- Microsoft Visual Studio Installer | score 10 | last used: never observed
+- Grammarly for Windows | score 10 | last used: never observed
+- MySQL Documents 8.0 | score 10 | last used: never observed
+- Microsoft Silverlight | score 10 | last used: never observed
+- Apple Mobile Device Support | score 10 | last used: never observed
+- Apple Software Update | score 10 | last used: never observed
+- MySQL Examples and Samples 8.0 | score 10 | last used: never observed
+- Bonjour | score 10 | last used: never observed
+- Adobe Genuine Service | score 10 | last used: never observed
+- Anaconda3 2023.07-2 (Python 3.11.4 64-bit) | score 10 | last used: never observed
+- DataStax Community Edition (64-bit) 2.2.3 | score 10 | last used: never observed
+- DBeaver 24.3.4 (current user) | score 10 | last used: never observed
+- Docs | score 10 | last used: never observed
+- Docs | score 10 | last used: never observed
+- Entity Framework 6.2.0 Tools  for Visual Studio 2019 | score 10 | last used: never observed
+- GitHub CLI | score 10 | last used: never observed
+- Gmail | score 10 | last used: never observed
+- Gmail | score 10 | last used: never observed
+- Google Drive | score 10 | last used: never observed
+- Google Drive | score 10 | last used: never observed
+Likely active (score >= 65): 1
+- Discord | score 75 | last used: 2026-06-05T07:10:22.309000+00:00

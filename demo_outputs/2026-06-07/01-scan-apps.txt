@@ -1,0 +1,1 @@
+App scan complete. Inventory updated for 273 apps using 192 UserAssist signals and 0 ActivityWatch signals.

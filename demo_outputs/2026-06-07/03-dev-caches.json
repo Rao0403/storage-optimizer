@@ -1,0 +1,30 @@
+{
+  "report_path": "C:\\Users\\Aryan\\Documents\\StorageGenius\\dev-caches-20260607-173155.html",
+  "findings": [
+    {
+      "ecosystem": "python",
+      "name": "anaconda-pkgs",
+      "path": "C:\\Users\\Aryan\\anaconda3\\pkgs",
+      "size_bytes": 5574628951,
+      "reclaim_method": "Delete Anaconda package cache",
+      "expected_side_effects": "Anaconda may need to redownload package archives later."
+    },
+    {
+      "ecosystem": "python",
+      "name": "pip-cache-localappdata",
+      "path": "C:\\Users\\Aryan\\AppData\\Local\\pip\\cache",
+      "size_bytes": 4192094526,
+      "reclaim_method": "Delete pip cache contents",
+      "expected_side_effects": "pip will redownload packages when the cache is missing."
+    },
+    {
+      "ecosystem": "node",
+      "name": "npm-cache",
+      "path": "C:\\Users\\Aryan\\AppData\\Local\\npm-cache",
+      "size_bytes": 3265764140,
+      "reclaim_method": "Delete package manager cache contents",
+      "expected_side_effects": "Next install may take longer while the cache is rebuilt."
+    }
+  ],
+  "queued_action_ids": []
+}

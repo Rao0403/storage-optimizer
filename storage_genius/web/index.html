@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#10212b">
+  <title>StorageGenius | Local storage console</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark">SG</div>
+        <div>
+          <strong>StorageGenius</strong>
+          <span>local storage console</span>
+        </div>
+      </div>
+
+      <nav class="nav" aria-label="Primary navigation">
+        <button class="nav-item active" data-view="overview"><span class="nav-icon">01</span>Overview</button>
+        <button class="nav-item" data-view="hotspots"><span class="nav-icon">02</span>Hotspots</button>
+        <button class="nav-item" data-view="caches"><span class="nav-icon">03</span>Dev caches</button>
+        <button class="nav-item" data-view="apps"><span class="nav-icon">04</span>App review</button>
+        <button class="nav-item" data-view="queue"><span class="nav-icon">05</span>Action queue</button>
+      </nav>
+
+      <div class="sidebar-note">
+        <div class="status-dot"></div>
+        <div>
+          <strong>Local only</strong>
+          <span>Nothing leaves this machine.</span>
+        </div>
+      </div>
+      <div class="sidebar-foot">StorageGenius v2<br><span>Review before you reclaim.</span></div>
+    </aside>
+
+    <main class="workspace">
+      <header class="topbar">
+        <div>
+          <div class="eyebrow">C: pressure console <span class="live-pill"><i></i> live</span></div>
+          <h1>Make room without guesswork.</h1>
+          <p class="lede">See what is consuming your SSD, understand the likely savings, then approve only the actions you trust.</p>
+        </div>
+        <div class="top-actions">
+          <span id="last-refresh" class="muted-label">Waiting for first scan</span>
+          <button id="refresh-button" class="button button-quiet">Refresh</button>
+          <button id="run-all-button" class="button button-primary">Run observation scans</button>
+        </div>
+      </header>
+
+      <div id="notice" class="notice" role="status" aria-live="polite"></div>
+
+      <section id="overview" class="view-section active" data-section>
+        <div class="stat-grid">
+          <article class="stat-card stat-card-dark reveal-item">
+            <div class="stat-label">C: drive free</div>
+            <div id="c-free" class="stat-value">--</div>
+            <div id="c-free-meta" class="stat-meta">Drive data is loading</div>
+            <div class="meter meter-dark"><span id="c-meter"></span></div>
+          </article>
+          <article class="stat-card reveal-item">
+            <div class="stat-label">Predicted reclaim</div>
+            <div id="reclaim-total" class="stat-value">--</div>
+            <div class="stat-meta">From the latest C: hotspot scan</div>
+            <div class="stat-accent">Observation only</div>
+          </article>
+          <article class="stat-card reveal-item">
+            <div class="stat-label">Queue awaiting review</div>
+            <div id="queue-pending" class="stat-value">--</div>
+            <div id="queue-meta" class="stat-meta">No actions execute at scan time</div>
+            <div class="stat-accent accent-coral">Approval required</div>
+          </article>
+          <article class="stat-card reveal-item">
+            <div class="stat-label">Apps to review</div>
+            <div id="app-review-count" class="stat-value">--</div>
+            <div id="app-count-meta" class="stat-meta">Usage scoring is informational</div>
+            <div class="stat-accent accent-blue">No uninstall automation</div>
+          </article>
+        </div>
+
+        <div class="dashboard-grid">
+          <article class="panel panel-drive reveal-item">
+            <div class="panel-heading">
+              <div><div class="kicker">Storage map</div><h2>Where C: is under pressure</h2></div>
+              <span id="hotspot-scan-time" class="panel-time">Not scanned</span>
+            </div>
+            <div id="category-bars" class="category-bars empty-state">Run a hotspot scan to map the drive.</div>
+            <div class="panel-footer"><span>Categories are ranked by observed size.</span><button class="text-button" data-jump="hotspots">Open hotspot detail <span>-></span></button></div>
+          </article>
+
+          <article class="panel panel-queue reveal-item">
+            <div class="panel-heading">
+              <div><div class="kicker">Control plane</div><h2>Action queue</h2></div>
+              <span class="queue-lock">locked by default</span>
+            </div>
+            <div id="queue-preview" class="queue-preview empty-state">No queued actions. Scan recommendations will appear here.</div>
+            <div class="panel-footer"><span>Every action has a visible state.</span><button class="text-button" data-jump="queue">Review queue <span>-></span></button></div>
+          </article>
+        </div>
+
+        <article class="panel panel-table reveal-item">
+          <div class="panel-heading">
+            <div><div class="kicker">Largest signals</div><h2>Top storage hotspots</h2></div>
+            <button class="button button-small button-quiet" data-jump="hotspots">View all</button>
+          </div>
+          <div id="top-hotspots" class="table-wrap"><div class="empty-state">No hotspot findings yet.</div></div>
+        </article>
+      </section>
+
+      <section id="hotspots" class="view-section" data-section>
+        <div class="section-heading"><div><div class="kicker">Observation layer</div><h2>Storage hotspots</h2><p>Large files, caches, installers, archives, and app folders found under the configured C: roots.</p></div><button class="button button-primary scan-button" data-scan="hotspots">Scan C: hotspots</button></div>
+        <article class="panel panel-table"><div id="hotspot-table" class="table-wrap"><div class="empty-state">Run a hotspot scan to populate this view.</div></div></article>
+      </section>
+
+      <section id="caches" class="view-section" data-section>
+        <div class="section-heading"><div><div class="kicker">Developer maintenance</div><h2>Node and Python caches</h2><p>Cache paths are safe candidates for review because package managers can recreate them when needed.</p></div><button class="button button-primary scan-button" data-scan="dev-caches">Scan dev caches</button></div>
+        <article class="callout"><div class="callout-icon">i</div><div><strong>What happens next?</strong><span>Scanning only observes. To create a deletion recommendation, use the CLI command <code>recommend dev-caches --enqueue</code>, then approve it in the queue.</span></div></article>
+        <article class="panel panel-table"><div id="cache-table" class="table-wrap"><div class="empty-state">Run a developer cache scan to populate this view.</div></div></article>
+      </section>
+
+      <section id="apps" class="view-section" data-section>
+        <div class="section-heading"><div><div class="kicker">Usage intelligence</div><h2>App review</h2><p>Usage score combines local signals and optional ActivityWatch evidence. It never uninstalls anything.</p></div><button class="button button-primary scan-button" data-scan="apps">Refresh app inventory</button></div>
+        <article class="panel panel-table"><div id="app-table" class="table-wrap"><div class="empty-state">Run an app scan to populate this view.</div></div></article>
+      </section>
+
+      <section id="queue" class="view-section" data-section>
+        <div class="section-heading"><div><div class="kicker">Approval workflow</div><h2>Action queue</h2><p>Review the exact path and intended operation. Approve first, execute second, undo when the action supports restoration.</p></div><button id="execute-button" class="button button-danger">Execute approved</button></div>
+        <article class="callout callout-warning"><div class="callout-icon">!</div><div><strong>Destructive actions are gated.</strong><span>The dashboard never executes an action just because a scan found it. Cache deletion is intentionally marked non-restorable.</span></div></article>
+        <article class="panel panel-table"><div id="queue-table" class="table-wrap"><div class="empty-state">No actions in the queue.</div></div></article>
+      </section>
+
+      <footer class="workspace-footer">Built for deliberate cleanup. Local API: <code>127.0.0.1</code> only by default.</footer>
+    </main>
+  </div>
+  <script src="/app.js" defer></script>
+</body>
+</html>

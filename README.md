@@ -62,6 +62,14 @@ The uninstall side is intentionally advisory in v1. Windows uninstall metadata i
 - Queue-driven relocation execution with copy, verify, junction cutover, and undo support.
 - Static HTML report for relocation candidates with risk flags and destination paths.
 
+## Local dashboard
+
+- Modern local web dashboard served directly by the Python standard library.
+- Overview cards for C: and D: capacity, predicted reclaim, app review count, and queue state.
+- Detail views for hotspot findings, developer caches, scored apps, and queued actions.
+- Read-only observation scans from the UI; queue approval remains explicit and execution requires a second confirmation.
+- No frontend package installation, cloud service, or local web server dependency.
+
 ## Project layout
 
 ```text
@@ -73,6 +81,11 @@ storage_genius/
   file_rules.py
   app_usage.py
   windows_apps.py
+  ui.py
+  web/
+    index.html
+    styles.css
+    app.js
 tests/
 ```
 
@@ -155,6 +168,14 @@ python -m storage_genius --config config.json report apps --json
 python -m storage_genius --config config.json scan-relocation
 python -m storage_genius --config config.json recommend relocation --enqueue
 ```
+
+13. Launch the local dashboard:
+
+```powershell
+python -m storage_genius --config config.json ui
+```
+
+Open `http://127.0.0.1:8765` in your browser. Keep the default bind address so the dashboard is reachable only from this laptop. The dashboard can refresh observation scans, but it will not execute queued actions without an explicit approval and a separate execution confirmation.
 
 ## Config example
 

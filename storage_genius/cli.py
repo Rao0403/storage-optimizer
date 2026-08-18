@@ -94,6 +94,10 @@ def build_parser() -> argparse.ArgumentParser:
     run_once_parser = subparsers.add_parser("run-once", help="Run cleanup, app scan, and unused-app reporting.")
     run_once_parser.add_argument("--dry-run", action="store_true", help="Preview file moves without changing files.")
 
+    ui_parser = subparsers.add_parser("ui", help="Run the local StorageGenius dashboard.")
+    ui_parser.add_argument("--host", default="127.0.0.1", help="Bind address. Keep the default for local-only access.")
+    ui_parser.add_argument("--port", type=int, default=8765, help="HTTP port for the dashboard.")
+
     return parser
 
 
@@ -644,6 +648,10 @@ def main(argv: list[str] | None = None) -> int:
         )
     if args.command == "run-once":
         return _run_once(config_path, dry_run=args.dry_run)
+    if args.command == "ui":
+        from .ui import run_ui
+
+        return run_ui(config_path, host=args.host, port=args.port)
 
     parser.error("Unknown command")
     return 2
